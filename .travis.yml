@@ -1,19 +1,17 @@
 language: ruby
 rvm:
-  - 2.4.0
+  - 2.5.0
 bundler_args: --without development
 script:
   - bundle exec nanoc compile
   - bundle exec nanoc check internal_links mixed_content stale
 cache:
   - bundler
-after_success:
-  - ./.travis_build_pages
 deploy:
   provider: pages
   local-dir: output
-  skip_cleanup: true
-  github_token: $GH_TOKEN
-  keep_history: true
+  skip-cleanup: true
+  github-token: $GH_TOKEN  # Set in the settings page of your repository, as a secure variable
+  keep-history: true
   on:
     branch: master
