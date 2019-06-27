@@ -1,0 +1,45 @@
+---
+title: "Comunica: an overview"
+---
+<header markdown="1">
+# <%= @item[:title] %>
+<div id="repeating-title"><%= @item[:title] %></div>
+
+{:#authors}
+- <%= person 'Joachim Van Herwegen', '#', 'https://data.verborgh.org/people/joachim_van_herwegen' %>
+- <%= person 'Ruben Taelman', 'http://www.rubensworks.net/', 'http://www.rubensworks.net/#me' %>
+- <%= person 'Miel Vander Sande', '#', 'https://data.verborgh.org/people/miel_vander_sande' %>
+- <%= person 'Ruben Verborgh', 'https://ruben.verborgh.org/', 'https://ruben.verborgh.org/profile/#me' %>
+
+{:#affiliations}
+- {:#idlab} IDLab,
+            Department of Electronics and Information Systems,
+            Ghent University – imec
+
+<section class="context" markdown="block">
+## In reply to
+- [Call for Linked Research](https://linkedresearch.org/calls){:rel="as:inReplyTo"}
+- [Journal of Web Semantics](https://www.journals.elsevier.com/journal-of-web-semantics/){:rel="as:inReplyTo"}
+</section>
+</header>
+
+<div id="content">
+  <%= section 'abstract' %>
+
+<div class="double-column">
+
+<main>
+  <%= section 'introduction'  %>
+  <%= section 'architecture'  %>
+  <%= section 'implementation'  %>
+  <%= section 'related-work'  %>
+  <%= section 'conclusions'  %>
+</main>
+
+<footer>
+  <%= section 'acknowledgements'  %>
+</footer>
+
+
+</div>
+</div>

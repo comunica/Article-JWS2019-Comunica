@@ -1,0 +1,10 @@
+validate:
+  image: "ruby:2.4.0"
+  cache:
+    key: "$CI_COMMIT_REF_SLUG"
+    paths:
+    - vendor/
+  script:
+    - bundle install --path vendor
+    - bundle exec nanoc compile
+    - bundle exec nanoc check internal_links mixed_content stale
