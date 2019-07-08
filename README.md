@@ -15,7 +15,7 @@ bundle exec guard
 ```
 
 ## Live version
-https://comunica.github.io/article-jws2019-comunica/
+https://comunica.github.io/Article-JWS2019-Comunica/
 
 ## License
 This article is written by Joachim Van Herwegen and colleagues.
