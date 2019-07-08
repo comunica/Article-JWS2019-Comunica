@@ -62,13 +62,39 @@
   <section id="abstract">
     <h2>Abstract</h2>
     <!-- Context      -->
-    <!-- Need         -->
-    <!-- Task         -->
-    <!-- Object       -->
-    <!-- Findings     -->
-    <!-- Conclusion   -->
-    <!-- Perspectives -->
-
+    <p>Query evaluation over Linked Data sources has become a complex story,
+given the multitude of algorithms and techniques
+for single- and multi-source querying,
+as well as the heterogeneity of Web interfaces
+through which data is published online.
+<!-- Need         -->
+Today’s query processors are insufficiently adaptable
+to test multiple query engine aspects in combination,
+such as evaluating the performance of a certain join algorithm
+over a federation of heterogeneous interfaces.
+The Semantic Web research community is in need of a flexible query engine
+that allows plugging in new components
+such as different algorithms,
+new or experimental <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> features,
+and support for new Web interfaces.
+<!-- Task         -->
+We designed and developed a Web-friendly and modular meta query engine
+called <em>Comunica</em>
+that meets these specifications.
+<!-- Object       -->
+Some time ago we published our first resources paper about Comunica.
+In this article,
+we expand upon the architectural decisions
+and introduce many of the resources available to get started developing with the framework.
+<!-- Findings     -->
+We show how its modular nature makes it an ideal research platform
+for investigating new kinds of Linked Data interfaces and querying algorithms.
+We additionally cover some of the instances were Comunica is already being used by other tools.
+<!-- Conclusion   -->
+Comunica facilitates the development, testing, and evaluation
+of new query processing capabilities,
+both in isolation and in combination with others.
+<!-- Perspectives --></p>
   </section>
 
 
@@ -77,27 +103,687 @@
 <main>
   <section id="introduction">
         <h2>Introduction</h2>
+
+        <p>Linked Data on the Web exists in many shapes and forms—and
+so do the processors we use to query data from one or multiple sources.
+For instance,
+engines that query <abbr title='Resource Description Framework'>RDF</abbr> data using the <a property="schema:citation http://purl.org/spar/cito/citesAsAuthority" href="https://www.w3.org/TR/2013/REC-sparql11-query-20130321/"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> language</a> <span class="references">[<a href="#ref-1">1</a>]</span>
+employ <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1145/1804669.1804675"><a href="http://doi.acm.org/10.1145/1804669.1804675"><em>different algorithms</em></a></span> <span class="references">[<a href="#ref-2">2</a>, <a href="#ref-3">3</a>]</span>
+and support <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1007/978-3-642-02184-8_2"><a href="https://doi.org/10.1007/978-3-642-02184-8_2"><em>different language extensions</em></a></span> <span class="references">[<a href="#ref-4">4</a>, <a href="#ref-5">5</a>]</span>.
+Furthermore,
+Linked Data is increasingly published through <em>different Web interfaces</em>,
+such as
+data dumps, <a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/DesignIssues/LinkedData.html">Linked Data documents</a> <span class="references">[<a href="#ref-6">6</a>]</span>,
+<a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> endpoints</a> <span class="references">[<a href="#ref-7">7</a>]</span>
+and <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1016/j.websem.2016.03.003"><a href="http://linkeddatafragments.org/publications/jws2016.pdf">Triple Pattern Fragments (<abbr title='Triple Pattern Fragments'>TPF</abbr>) interfaces</a></span> <span class="references">[<a href="#ref-8">8</a>]</span>.
+This has led to entirely different query evaluation strategies,
+such as <a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/">server-side</a> <span class="references">[<a href="#ref-7">7</a>]</span>,
+<a property="schema:citation http://purl.org/spar/cito/cites" href="http://olafhartig.de/files/Hartig_QueryingLD_DBSpektrum_Preprint.pdf">link-traversal-based</a> <span class="references">[<a href="#ref-9">9</a>]</span>,
+<span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1016/j.websem.2016.03.003"><a href="http://linkeddatafragments.org/publications/jws2016.pdf">shared client–server query processing</a></span> <span class="references">[<a href="#ref-8">8</a>]</span>,
+and
+client-side (by downloading data dumps and loading them locally).</p>
+
+        <p>The resulting variety of implementations
+suffers from two main problems:
+a lack of <em>sustainability</em>
+and a lack of <em>comparability</em>.
+Alternative query algorithms and features
+are typically either implemented as <a property="schema:citation http://purl.org/spar/cito/cites" href="http://linkeddatafragments.org/publications/eswc2015.pdf"><em>forks</em> of existing software packages</a> <span class="references">[<a href="#ref-10">10</a>, <a href="#ref-11">11</a>, <a href="#ref-12">12</a>]</span>
+or as <a property="schema:citation http://purl.org/spar/cito/cites" href="http://iswc2015.semanticweb.org/sites/iswc2015.semanticweb.org/files/93660097.pdf"><em>independent</em> engines</a> <span class="references">[<a href="#ref-13">13</a>]</span>.
+This practice has limited sustainability:
+forks are often not merged into the main software distribution
+and hence become abandoned;
+independent implementations require a considerable upfront cost
+and also risk abandonment more than established engines.
+Comparability is also limited:
+forks based on older versions of an engine
+cannot meaningfully be evaluated against newer forks,
+and evaluating <em>combinations</em> of cross-implementation features—such as
+different algorithms on different interfaces—is
+not possible without code adaptation.
+As a result, many interesting comparisons are never performed
+because they are too costly to implement and maintain.
+For example,
+it is currently unknown
+how the <a property="schema:citation http://purl.org/spar/cito/citesAsAuthority" href="http://iswc2015.semanticweb.org/sites/iswc2015.semanticweb.org/files/93660097.pdf">Linked Data Eddies algorithm</a> <span class="references">[<a href="#ref-13">13</a>]</span>
+performs over a <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1016/j.websem.2016.03.003"><a href="http://linkeddatafragments.org/publications/jws2016.pdf">federation</a></span> <span class="references">[<a href="#ref-8">8</a>]</span>
+of <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1007/978-3-319-48472-3_48"><a href="https://arxiv.org/pdf/1608.08148.pdf">brTPF interfaces</a></span> <span class="references">[<a href="#ref-14">14</a>]</span>.
+Another example is that the effects of various <a property="schema:citation http://purl.org/spar/cito/cites" href="http://linkeddatafragments.org/publications/eswc2015.pdf">optimizations and extensions for <abbr title='Triple Pattern Fragments'>TPF</abbr> interfaces</a> <span class="references">[<a href="#ref-10">10</a>, <a href="#ref-11">11</a>, <a href="#ref-12">12</a>, <a href="#ref-13">13</a>, <a href="#ref-14">14</a>, <a href="#ref-15">15</a>, <a href="#ref-16">16</a>, <a href="#ref-17">17</a>]</span>
+have only been evaluated in isolation,
+whereas certain combinations will likely prove complementary.</p>
+
+        <p>In order to handle the increasing heterogeneity of Linked Data on the Web,
+as well as various solutions for querying it,
+there is a need for a flexible and modular query engine
+to experiment with all of these techniques—both separately and in combination.
+In this article, we introduce <em>Comunica</em> to realize this vision.
+It is a highly modular meta engine for federated <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> query evaluation
+over heterogeneous interfaces,
+including <abbr title='Triple Pattern Fragments'>TPF</abbr> interfaces, <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> endpoints, and data dumps.
+Comunica aims to serve as a flexible research platform for
+designing, implementing, and evaluating
+new and existing Linked Data querying and publication techniques.</p>
+
+        <p>Comunica differs from existing query processors on different levels:</p>
+
+        <ol>
+          <li>The <strong>modularity</strong> of the Comunica meta query engine allows for
+<em>extensions</em> and <em>customization</em> of algorithms and functionality.
+Users can build and fine-tune a concrete engine
+by wiring the required modules through an <abbr title='Resource Description Framework'>RDF</abbr> configuration document.
+By publishing this document,
+experiments can repeated and adapted by others.</li>
+          <li>Within Comunica, multiple <strong>heterogeneous interfaces</strong> are first-class citizens. This enables federated querying over heterogeneous sources and makes it for example possible to evaluate queries over any combination of <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> endpoints, <abbr title='Triple Pattern Fragments'>TPF</abbr> interfaces, datadumps, or other types of interfaces.</li>
+          <li>Comunica is implemented using <strong>Web-based technologies</strong> in JavaScript, which enables usage through browsers, the command line, the <a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> protocol</a> <span class="references">[<a href="#ref-7">7</a>]</span>, or any Web or JavaScript application.</li>
+        </ol>
+
+        <p>Comunica and its default modules are publicly available
+on GitHub and the npm package manager under the open-source MIT license
+(canonical citation: <a href="https://zenodo.org/record/1202509#.Wq9GZhNuaHo">https:/​/​zenodo.org/record/1202509#.Wq9GZhNuaHo</a>).</p>
+
+        <p>Some time ago we released our initial resource paper about <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1007/978-3-030-00668-6_15"><a href="https://comunica.github.io/Article-ISWC2018-Resource/">Comunica</a></span> <span class="references">[<a href="#ref-18">18</a>]</span>
+where we introduced our new framework.
+In this paper we cover the architecture more extensively
+to provide a clearer picture of the internals of the framework.
+Besides that we also cover many of the additional tools that have been made around Comunica.
+These cover both tools that help developers to work on Comunica, making their life easier there,
+and a showcase of other technologies that already make use of Comunica
+to handle their querying of Linked Data.</p>
+
+        <p>{.todo}
+Update the structure section below based on final structure.</p>
+
+        <p>This article is structured as follows.
+In the next section, we discuss the related work, followed by the main features of Comunica in <a href="#features"></a>.
+After that, we introduce the architecture of Comunica in <a href="#architecture">Section 2</a>, and its implementation in <a href="#implementation">Section 3</a>.
+Next, we compare the performance of different Comunica configurations with the <abbr title='Triple Pattern Fragments'>TPF</abbr> Client in <a href="#comparison-tpf-client"></a>.
+Finally, <a href="#conclusions">Section 7</a> concludes and discusses future work.</p>
+
       </section>
 
   <section id="architecture">
         <h2>Architecture</h2>
+
+        <p>In this section, we discuss the design and architecture of the Comunica meta engine,
+and show how it conforms to the <em>modularity</em> feature requirement.
+In summary, Comunica is collection of small modules that, when wired together,
+are able to perform a certain task, such as evaluating <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> queries.
+We first discuss the customizability of Comunica at design-time,
+followed by the flexibility of Comunica at run-time.
+Finally, we give an overview of all modules.</p>
+
+        <h3 id="customizable-wiring-at-design-time-through-dependency-injection">Customizable Wiring at Design-time through Dependency Injection</h3>
+
+        <p>There is no such thing as <em>the</em> Comunica engine,
+instead, Comunica is a meta engine that can be <em>instantiated</em> into different engines based on different configurations.
+Comunica achieves this customizability at design-time using the concept of <a property="schema:citation http://purl.org/spar/cito/cites" href="https://martinfowler.com/articles/injection.html"><em>dependency injection</em></a> <span class="references">[<a href="#ref-19">19</a>]</span>.
+Using a configuration file, which is created before an engine is started,
+components for an engine can be <em>selected</em>, <em>configured</em> and <em>combined</em>.
+For this, we use the <a property="schema:citation http://purl.org/spar/cito/cites" href="http://componentsjs.readthedocs.io/en/latest/">Components.js</a> <span class="references">[<a href="#ref-20">20</a>]</span> JavaScript dependency injection framework,
+This framework is based on semantic module descriptions and configuration files
+using the <a property="schema:citation http://purl.org/spar/cito/cites" href="https://linkedsoftwaredependencies.org/articles/describing-experiments/">Object-Oriented Components ontology</a> <span class="references">[<a href="#ref-21">21</a>]</span>.</p>
+
+        <h4 id="description-of-individual-software-components">Description of Individual Software Components</h4>
+
+        <p>In order to refer to Comunica components from within configuration files,
+we semantically describe all Comunica components using the Components.js framework in JSON-LD <span class="references">[<a href="#ref-22">22</a>]</span>.
+<a href="#config-actor">Listing 1</a> shows an example of the semantic description of an <abbr title='Resource Description Framework'>RDF</abbr> parser.</p>
+
+        <h4 id="description-of-complex-software-configurations">Description of Complex Software Configurations</h4>
+
+        <p>A specific instance of a Comunica engine
+can be <em>initialized</em> using Components.js configuration files
+that describe the wiring between components.
+For example, <a href="#config-parser">Listing 2</a> shows a configuration file of an engine that is able to parse N3 and JSON-LD-based documents.
+This example shows that, due to its high degree of modularity,
+Comunica can be used for other purposes than a query engine,
+such as building a custom <abbr title='Resource Description Framework'>RDF</abbr> parser.</p>
+
+        <p>Since many different configurations can be created,
+it is important to know which one was used for a specific use case or evaluation.
+For that purpose,
+the <abbr title='Resource Description Framework'>RDF</abbr> documents that are used to instantiate a Comunica engine
+can be <a property="schema:citation http://purl.org/spar/cito/citeAsEvidence" href="https://linkedsoftwaredependencies.org/articles/describing-experiments/">published as Linked Data</a> <span class="references">[<a href="#ref-21">21</a>]</span>.
+They can then serve as provenance
+and as the basis for derived set-ups or evaluations.</p>
+
+        <figure id="config-actor" class="listing">
+<pre><code>{
+</code><code>  &quot;@context&quot;: [ ... ],
+</code><code>  &quot;@id&quot;: &quot;npmd:@comunica/actor-rdf-parse-n3&quot;,
+</code><code>  &quot;components&quot;: [
+</code><code>    {
+</code><code>      &quot;@id&quot;:            &quot;crpn3:Actor/RdfParse/N3&quot;,
+</code><code>      &quot;@type&quot;:          &quot;Class&quot;,
+</code><code>      &quot;extends&quot;:        &quot;cbrp:Actor/RdfParse&quot;,
+</code><code>      &quot;requireElement&quot;: &quot;ActorRdfParseN3&quot;,
+</code><code>      &quot;comment&quot;:        &quot;An actor that parses Turtle-like RDF&quot;,
+</code><code>      &quot;parameters&quot;: [
+</code><code>        {
+</code><code>          &quot;@id&quot;: &quot;caam:Actor/AbstractMediaTypedFixed/mediaType&quot;,
+</code><code>          &quot;default&quot;: [ &quot;text/turtle&quot;, &quot;application/n-triples&quot; ]
+</code><code>        }
+</code><code>      ]
+</code><code>    }
+</code><code>  ]
+</code><code>}
+</code></pre>
+<figcaption>
+            <p><span class="label">Listing 1:</span> Semantic description of a component that is able to parse N3-based <abbr title='Resource Description Framework'>RDF</abbr> serializations.
+This component has a single parameter that allows media types to be registered that this parser is able to handle.
+In this case, the component has four default media types.</p>
+          </figcaption>
+</figure>
+
+        <figure id="config-parser" class="listing">
+<pre><code>{
+</code><code>  &quot;@context&quot;: [ ... ],
+</code><code>  &quot;@id&quot;: &quot;http://example.org/myrdfparser&quot;,
+</code><code>  &quot;@type&quot;: &quot;Runner&quot;,
+</code><code>  &quot;actors&quot;: [
+</code><code>    { &quot;@type&quot;: &quot;ActorInitRdfParse&quot;,
+</code><code>      &quot;mediatorRdfParse&quot;: {
+</code><code>        &quot;@type&quot;: &quot;MediatorRace&quot;,
+</code><code>        &quot;cc:Mediator/bus&quot;: { &quot;@id&quot;: &quot;cbrp:Bus/RdfParse&quot; }
+</code><code>      } },
+</code><code>    { &quot;@type&quot;: &quot;ActorRdfParseN3&quot;,
+</code><code>      &quot;cc:Actor/bus&quot;: &quot;cbrp:Actor/RdfParse&quot; },
+</code><code>    { &quot;@type&quot;: &quot;ActorRdfParseJsonLd&quot;,
+</code><code>      &quot;cc:Actor/bus&quot;: &quot;cbrp:Actor/RdfParse&quot; },
+</code><code>  ]
+</code><code>}
+</code></pre>
+<figcaption>
+            <p><span class="label">Listing 2:</span> Comunica configuration of <code>ActorInitRdfParse</code> for parsing an <abbr title='Resource Description Framework'>RDF</abbr> document in an unknown serialization.
+This actor is linked to a mediator with a bus containing two <abbr title='Resource Description Framework'>RDF</abbr> parsers for specific serializations.</p>
+          </figcaption>
+</figure>
+
+        <h3 id="flexibility-at-run-time-using-the-actormediatorbus-pattern">Flexibility at Run-time using the Actor–Mediator–Bus Pattern</h3>
+
+        <p>Once a Comunica engine has been configured and initialized,
+components can interact with each other in a flexible way using the <em>actor</em> <span class="references">[<a href="#ref-23">23</a>]</span>,
+<em>mediator</em> <span class="references">[<a href="#ref-24">24</a>]</span>, and <em>publish–subscribe</em> <span class="references">[<a href="#ref-25">25</a>]</span> patterns.
+Any number of <em>actor</em>, <em>mediator</em> and <em>bus</em> modules can be created,
+where each actor interacts with mediators, that in turn invoke other actors that are registered to a certain bus.</p>
+
+        <p><a href="#actor-mediator-bus">Fig. 1</a> shows an example logic flow between actors through a mediator and a bus.
+The relation between these components, their phases and the chaining of them will be explained hereafter.</p>
+
+        <figure id="actor-mediator-bus">
+<img src="img/actor-mediator-bus.svg" alt="[actor-mediator-bus pattern]" class="figure-narrow" />
+<figcaption>
+            <p><span class="label">Fig. 1:</span> Example logic flow where Actor 0 requires an <em>action</em> to be performed.
+This is done by sending the action to the Mediator, which sends a <em>test action</em> to Actors 1, 2 and 3 via the Bus.
+The Bus then sends all <em>test replies</em> to the Mediator,
+which chooses the best actor for the action, in this case Actor 3.
+Finally, the Mediator sends the original action to Actor 3, and returns its response to Actor 0.</p>
+          </figcaption>
+</figure>
+
+        <h4 id="relation-between-actors-and-buses">Relation between Actors and Buses</h4>
+
+        <p>Actors are the main computational units in Comunica,
+they are responsible for handling all the tasks and computations that need to be done.
+These can range from simple jobs like executing a <abbr title='Hypertext Transfer Protocol'>HTTP</abbr> request 
+to more complex functions such as solving a <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> query.
+The main idea is that more complex actors can delegate some of their work to the simpler actors,
+thereby reducing the implementation required and increasing the reuse of existing code.</p>
+
+        <p>Buses and mediators form the <em>glue</em> that tie the actors together and makes them interactable.
+Every actor subscribes to one or more buses,
+which contain a collection of actors.
+Actors are responsible for being able to accept certain messages via their bus(es),
+and for responding with an answer.
+<a href="#relation-actor-bus">Fig. 2</a> shows an example of how actors can be registered to buses.</p>
+
+        <p>Initially we thought about having a single bus where all messages would be sent.
+Every actor would then have to check every message to see if it applied to them.
+This would have caused a drastic overhead though,
+forcing many unnecessary checks from actors for unrelated messages.</p>
+
+        <p>In order to avoid this issue we created multiple buses
+and actors are grouped together based on their functionality.
+This greatly reduces the amount of unneeded message checks.
+The groupings happen based on the functionality of the actors.
+All actors that do transformations on bindings are grouped together for example,
+the same for actors that handle metadata, and so on.
+Note that these are the grouping that happen in the current existing implementations using Comunica.
+Nothing is stopping a developer from creating a configuration that only makes use of a single bus.</p>
+
+        <figure id="relation-actor-bus">
+<img src="img/relation-actor-bus.svg" alt="[relation between actors and buses]" class="figure-narrow" />
+<figcaption>
+            <p><span class="label">Fig. 2:</span> An example of two different buses each having two subscribed actors.
+The left bus has different actors for parsing triples in a certain <abbr title='Resource Description Framework'>RDF</abbr> serialization to triple objects.
+The right bus has actors that join query bindings streams together in a certain way.</p>
+          </figcaption>
+</figure>
+
+        <h4 id="mediators-handle-actor-run-and-test-phases">Mediators handle Actor Run and Test Phases</h4>
+
+        <p>Each mediator is connected to a single bus, and its goal is to determine and invoke the <em>best</em> actor for a certain task.
+The definition of ‘<em>best</em>’ depends on the mediator, and different implementations can lead to different choices in different scenarios.
+A mediator works in two phases: the <em>test</em> phase and the <em>run</em> phase.
+The test phase is used to check under which conditions the action can be performed in each actor on the bus.
+This phase must always come before the <em>run</em> phase, and is used to select which actor is best suited to perform a certain task under certain conditions.
+If such an actor is determined, the <em>run</em> phase of a single actor is initiated.
+This <em>run</em> phase takes this same type of message, and requires to <em>effectively act</em> on this message,
+and return the result of this action.
+<a href="#run-test-phases">Fig. 3</a> shows an example of a mediator invoking a run and test phase.</p>
+
+        <figure id="run-test-phases">
+<img src="img/run-test-phases.svg" alt="[mediators handle actor run and test phases]" />
+<figcaption>
+            <p><span class="label">Fig. 3:</span> Example sequence diagram of a mediator that chooses the fastest actor
+on a parse bus with two subscribed actors.
+The first parser is very fast but requires a lot of memory,
+while the second parser is slower, but requires less memory.
+Which one is best, depends on the use case and is determined by the Mediator.
+The mediator first calls the <em>tests</em> the actors for the action, and then <em>runs</em> the action using the <em>best</em> actor.</p>
+          </figcaption>
+</figure>
+
+        <p>It is up to the actors to provide a correct implementation of both the <em>test</em> and <em>run</em> functions.
+The <em>run</em> function is expected, it is the implementation of the actor’s functionality.
+The <em>test</em> function might be harder on the other hand.
+It consists of two steps:
+first it has to determine whether it can actually act on the given input,
+even though similar actors are grouped together
+some of them might be more specific and not able to handle all kinds of input.
+Secondly it has to return how much effort is required to execute this actor.
+Since it is not always possible to predict the costs of executing the <em>run</em> function,
+this function will often rely on estimates.
+Although there is nothing stopping an actor from lying about its functionality
+and providing incorrect estimates once it has been included,
+such actors should simply be removed again from the configuration.</p>
+
+        <p>Comunica does not enforce any other structure besides the actor model described above.
+How this model gets implemented will depend on the developer.
+In the actors we already provide we split up functionality as much as possible over multiple actors,
+thereby increasing actor reuse and focussing each actor on their own separate task,
+but on the complete other end of the spectrum it is possible to have an application with a single actor
+that does all the work,
+although this does lose the advantages of the actor model.
+With the actors we already provide we try to guide developers to create irreducible actors,
+but in the end there is flexibility there.</p>
+
+        <h4 id="executing-a-sparql-query">Executing a <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> query</h4>
+
+        <p>Although Comunica is not a single engine,
+we do provide some actors that have a preset configuration allowing users to immediately make use of its features.
+The main actor there is <a href="https://github.com/comunica/comunica/tree/master/packages/actor-init-sparql">actor-init-sparql</a>,
+which provides a configuration of actors allowing users to execute <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> over multiple heterogeneous sources.</p>
+
+        <p><a href="#sparql-diagram">Fig. 4</a> shows how an input query would be handled by that Comunica engine.
+Firstly the query would be parsed and converted to <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> algebra,
+which is how queries are represented internally.
+That algebra then gets sent to the <em>Query Operation</em> bus.
+This is a collection of actors that each handle one specific algebra operation,
+and recursively call the same bus again to solve the remaining algebra.
+Once a quad pattern gets reached,
+it gets sent to the <em>Quad Pattern Resolver</em> bus.
+Depending on the sources different actions are taken there.
+If there are multiple sources,
+these all get queried for results by recursively calling the same bus with the separate sources.
+In the case of a <abbr title='Triple Pattern Fragments'>TPF</abbr> source the paginated data gets streamed
+and the metadata extracted to finally reach the correct bindings,
+while in the case of a <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> endpoint a new query gets composed to get the corresponding results.
+These results then go all the way back up the stack of actors to be serialized in one of the available formats.</p>
+
+        <figure id="sparql-diagram">
+<img src="img/sparql-diagram.svg" alt="[sparql actor diagram]" />
+<figcaption>
+            <p><span class="label">Fig. 4:</span> An overview of the the flow through the actors when executing a <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> query with Comunica.</p>
+          </figcaption>
+</figure>
+
+        <h3 id="modules">Modules</h3>
+
+        <p>At the time of writing, Comunica consists of 118 different modules.
+This consists of 17 buses, 5 mediator types, 83 actors and 13 other modules.
+In this section, we will only discuss the most important actors and their interactions.</p>
+
+        <p>The main bus in Comunica is the <em>query operation</em> bus, which consists of 34 different actors
+that provide at least one possible implementation of the typical <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> operations such as quad patterns, basic graph patterns (BGPs), unions, projects, …
+These actors interact with each other using streams of <em>quad</em> or <em>solution mappings</em>,
+and act on a query plan expressed in in <a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/2013/REC-sparql11-query-20130321/"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> algebra</a> <span class="references">[<a href="#ref-1">1</a>]</span>.</p>
+
+        <p>In order to enable heterogeneous sources to be queried in a federated way,
+we allow a list of sources, annotated by type, to be passed when a query is initiated.
+These sources are passed down through the chain of query operation actors,
+until the quad pattern level is reached.
+At this level, different actors exist for handling a single source of a certain type,
+such as <abbr title='Triple Pattern Fragments'>TPF</abbr> interfaces, <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> endpoints, local or remote data dumps.
+In the case of multiple sources, one actor exists that implements a <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1016/j.websem.2016.03.003"><a href="http://linkeddatafragments.org/publications/jws2016.pdf">federation algorithm defined for <abbr title='Triple Pattern Fragments'>TPF</abbr></a></span> <span class="references">[<a href="#ref-8">8</a>]</span>,
+but instead of federating over different <abbr title='Triple Pattern Fragments'>TPF</abbr> interfaces, it federates over different single-source quad pattern actors.</p>
+
+        <p>At the end of the pipeline, different actors are available for serializing the results of a query in different ways.
+For instance, there are actors for serializing the results according to
+the <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> <a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/2013/REC-sparql11-results-json-20130321/">JSON</a> <span class="references">[<a href="#ref-26">26</a>]</span> and <a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/rdf-sparql-XMLres/">XML</a> <span class="references">[<a href="#ref-27">27</a>]</span> result specifications,
+but actors with more visual and developer-friendly formats are available as well.</p>
+
+        <h3 id="sparql-algebra"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> Algebra</h3>
+        <p>As mentioned before, internally Comunica converts <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> queries to
+<a href="https://www.w3.org/TR/sparql11-query/#sparqlDefinition"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> algebra</a>.
+For this we make use of two parsers,
+<a href="https://github.com/RubenVerborgh/<abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr>.js&#8221;>one</a> that first converts <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> strings to an custom JSON format,
+and <a href="https://github.com/joachimvh/SPARQLAlgebra.js">another</a> that converts that format 
+to a JSON representation of <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> algebra.
+The <a href="https://github.com/joachimvh/SPARQLAlgebra.js/blob/master/lib/algebra.ts">representation</a>
+is made to be as close to functions described in the specification as possible.</p>
+
+        <p>Using <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> algebra allows us to create actors
+that focus on the core actions required to solve <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> queries,
+without being too dependent on how the query was actually written.
+For every algebra operation we have (at least) one actor that solves that specific operation
+It also provides easier options to restructure and optimize the query before actual execution begins.</p>
 
       </section>
 
   <section id="implementation">
         <h2>Implementation</h2>
 
+        <p>Comunica is implemented in TypeScript/JavaScript as a collection of Node modules, which are able to run in Web browsers using native Web technologies.
+Comunica is available under an open license on <a href="https://zenodo.org/record/1202509#.Wq9GZhNuaHo" class="mandatory" data-link-text="https:/​/​zenodo.org/​record/​1202509#.Wq9GZhNuaHo">GitHub</a>
+and on the <a href="https://www.npmjs.com/org/comunica" class="mandatory" data-link-text="https:/​/​www.npmjs.com/​org/​comunica">NPM package manager</a>.
+The 79 Comunica modules are tested thoroughly, with more than 1,200 unit tests reaching a test coverage of 100%.
+In order to be compatible with existing JavaScript <abbr title='Resource Description Framework'>RDF</abbr> libraries,
+Comunica follows the JavaScript API specification by the <a href="https://www.w3.org/community/rdfjs/" class="mandatory" data-link-text="https:/​/​www.w3.org/​community/​rdfjs/​">RDFJS community group</a>,
+and will <a href="https://www.w3.org/community/rdfjs/2018/04/23/rdf-js-the-new-rdf-and-linked-data-javascript-library/">actively be further aligned</a> within this community.
+In order to encourage collaboration within the community, we extensively use the <a href="https://github.com/comunica/comunica/issues" class="mandatory" data-link-text="https:/​/​github.com/​comunica/​comunica/​issues">GitHub issue tracker</a>
+for planned features, bugs and other issues.
+Finally, we publish detailed <a href="https://comunica.readthedocs.io" class="mandatory" data-link-text="https:/​/​comunica.readthedocs.io">documentation</a> for the usage and development of Comunica.</p>
+
+        <p>We provide a default Linked Data-based configuration file with all available actors for evaluating federated <em><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> queries</em> over heterogeneous sources.
+This allows <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> queries to be evaluated using a command-line tool,
+from a Web service implementing the <a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> protocol</a> <span class="references">[<a href="#ref-7">7</a>]</span>,
+within a JavaScript application,
+or within the browser.
+We fully implemented <a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/2008/REC-rdf-sparql-query-20080115/"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> 1.0</a> <span class="references">[<a href="#ref-28">28</a>]</span> and a subset of <a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/2013/REC-sparql11-query-20130321/"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> 1.1</a> <span class="references">[<a href="#ref-1">1</a>]</span> at the time of writing.
+In future work, we intend to implement additional actors for supporting <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> 1.1 completely.</p>
+
+        <p>Comunica currently supports querying over the following types of <em>heterogeneous datasources and interfaces</em>:</p>
+
+        <ul>
+          <li><span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1016/j.websem.2016.03.003"><a href="http://linkeddatafragments.org/publications/jws2016.pdf">Triple Pattern Fragments interfaces</a></span> <span class="references">[<a href="#ref-8">8</a>]</span></li>
+          <li>Quad Pattern Fragments interfaces (<a href="https://github.com/LinkedDataFragments/Server.js/tree/feature-qpf-latest" class="mandatory" data-link-text="https:/​/​github.com/​LinkedDataFragments/​Server.js/​tree/​feature-​qpf-​latest">an experimental extension of <abbr title='Triple Pattern Fragments'>TPF</abbr> with a fourth graph element</a>)</li>
+          <li><a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> endpoints</a> <span class="references">[<a href="#ref-7">7</a>]</span></li>
+          <li>Local and remote dataset dumps in <abbr title='Resource Description Framework'>RDF</abbr> serializations.</li>
+          <li><a property="schema:citation http://purl.org/spar/cito/cites" href="http://www.websemanticsjournal.org/index.php/ps/article/view/328">HDT datasets</a> <span class="references">[<a href="#ref-29">29</a>]</span></li>
+          <li><a property="schema:citation http://purl.org/spar/cito/cites" href="https://rdfostrich.github.io/article-demo/">Versioned OSTRICH datasets</a> <span class="references">[<a href="#ref-30">30</a>]</span></li>
+        </ul>
+
+        <p>In order to demonstrate Comunica’s ability to evaluate <em>federated</em> query evaluation over <em>heterogeneous</em> sources,
+the following guide shows how you can <a href="https://gist.github.com/rubensworks/34bb69fa6c83176bce60a5e8a25051e8" class="mandatory" data-link-text="https:/​/​gist.github.com/​rubensworks/​34bb69fa6c83176bce60a5e8a25051e8">try this out in Comunica yourself</a>.</p>
+
+        <p>Support for new algorithms, query operators and interfaces can be implemented in an external module,
+without having to create a custom fork of the engine.
+The module can then be <em>plugged</em> into existing or new engines that are identified by
+<a href="https://github.com/comunica/comunica/blob/master/packages/actor-init-sparql/config/config-default.json" class="mandatory" data-link-text="https:/​/​github.com/​comunica/​comunica/​blob/​master/​packages/​actor-​init-​sparql/​config/​config-​default.json"><abbr title='Resource Description Framework'>RDF</abbr> configuration files</a>.</p>
+
+        <p>In the future, we will also look into adding support for other interfaces such as
+<span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1007/978-3-319-48472-3_48"><a href="https://arxiv.org/pdf/1608.08148.pdf">brTPF</a></span> <span class="references">[<a href="#ref-14">14</a>]</span> for more efficient join operations
+and <a property="schema:citation http://purl.org/spar/cito/cites" href="http://rubensworks.net/raw/publications/2017/vtpf.pdf">VTPF</a> <span class="references">[<a href="#ref-15">15</a>]</span> for queries over versioned datasets.</p>
+
       </section>
 
   <section id="related-work">
         <h2>Related Work</h2>
 
-        <p class="todo">Could also mention tools that make use of Comunica here?</p>
+        <p>In this section, we illustrate the many possible degrees of freedom for <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> query evaluation,
+and show that they are hard to combine, which is the problem we aim to solve with Comunica.
+We first discuss the <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> query language, its engines, and algorithms.
+After that, we discuss alternative Linked Data publishing interfaces, and their connection to querying.
+Finally, we discuss the software design patterns that are essential in the architecture of Comunica.</p>
+
+        <h3 id="the-different-facets-of-sparql">The Different Facets of <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr></h3>
+
+        <p><a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/2013/REC-sparql11-query-20130321/"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr></a> <span class="references">[<a href="#ref-1">1</a>]</span> is the W3C-recommended <abbr title='Resource Description Framework'>RDF</abbr> query language.
+The traditional way to implement a <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> query processor
+is to use it as an interface to an underlying database,
+resulting in a so-called <a property="schema:citation http://purl.org/spar/cito/citeAsAuthority" href="https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/"><em><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> endpoint</em></a> <span class="references">[<a href="#ref-7">7</a>]</span>.
+This is similar to how an SQL interface
+provides access to a relation database.
+The internal storage can either be a native <abbr title='Resource Description Framework'>RDF</abbr> store, e.g., AllegroGraph <span class="references">[<a href="#ref-31">31</a>]</span> and Blazegraph <span class="references">[<a href="#ref-32">32</a>]</span>,
+or a non-<abbr title='Resource Description Framework'>RDF</abbr> store, e.g., Virtuoso <span class="references">[<a href="#ref-33">33</a>]</span> uses a object-relational database management system.</p>
+
+        <p>Various algorithms have been proposed for optimized <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> query evaluation.
+Some algorithms for example use the concept of <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1145/1804669.1804675"><a href="http://doi.acm.org/10.1145/1804669.1804675">query rewriting</a></span> <span class="references">[<a href="#ref-2">2</a>]</span> based on algebraic equivalent query operations,
+others have proposed the <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1145/1367497.1367578"><a href="http://doi.acm.org/10.1145/1367497.1367578">optimization of Basic Graph Pattern evaluation</a></span> <span class="references">[<a href="#ref-3">3</a>]</span> using selectivity estimation of triple patterns.</p>
+
+        <p>In order to evaluate <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> queries over datasets of different storage types,
+<abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> query frameworks were developed, such as
+<a property="schema:citation http://purl.org/spar/cito/cites" href="https://jena.apache.org/">Jena (ARQ)</a> <span class="references">[<a href="#ref-34">34</a>]</span>, <a property="schema:citation http://purl.org/spar/cito/cites" href="https://rdflib.readthedocs.io/en/stable/">RDFLib</a> <span class="references">[<a href="#ref-35">35</a>]</span>, <a property="schema:citation http://purl.org/spar/cito/cites" href="https://github.com/linkeddata/rdflib.js">rdflib.js</a> <span class="references">[<a href="#ref-36">36</a>]</span> and <a property="schema:citation http://purl.org/spar/cito/cites" href="https://github.com/antoniogarrote/rdfstore-js">rdfstore-js</a> <span class="references">[<a href="#ref-37">37</a>]</span>.
+Jena is a Java framework, RDFLib is a python package, and rdflib.js and rdfstore-js are JavaScript modules.
+Jena—or more specifically the ARQ API—and RDFLib are fully <a property="schema:citation http://purl.org/spar/cito/cites" href="https://www.w3.org/TR/2013/REC-sparql11-query-20130321/"><abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> 1.1</a> <span class="references">[<a href="#ref-1">1</a>]</span> compliant.
+rdflib.js and rdfstore-js both support a subset of <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> 1.1.
+These <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> engines support in-memory models or other sources,
+such as Jena TDB in the case of ARQ.
+Most of the query algorithms are tightly coupled to these frameworks,
+which makes swapping out query algorithms for specific query operators hard or sometimes even impossible.
+Furthermore, complex things such as federated querying over heterogeneous interfaces are difficult to implement using these frameworks,
+as they are not supported out-of-the-box.
+This issue of modularity and heterogeneity are two of the main problems we aim to solve within Comunica.
+The differences between Comunica and existing frameworks will be explained in more detail in <a href="#features"></a>.</p>
+
+        <p>The <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1016/j.websem.2016.03.003"><a href="http://linkeddatafragments.org/publications/jws2016.pdf">Triple Pattern Fragments client</a></span> <span class="references">[<a href="#ref-8">8</a>]</span> (also known as Client.js or <code>ldf-client</code>) is a client-side <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> engine
+that retrieves data over <abbr title='Hypertext Transfer Protocol'>HTTP</abbr>
+through <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1016/j.websem.2016.03.003"><a href="http://linkeddatafragments.org/publications/jws2016.pdf">Triple Pattern Fragments (<abbr title='Triple Pattern Fragments'>TPF</abbr>) interfaces</a></span> <span class="references">[<a href="#ref-8">8</a>]</span>.
+<a property="schema:citation http://purl.org/spar/cito/cites" href="http://linkeddatafragments.org/publications/eswc2015.pdf">Different algorithms</a> <span class="references">[<a href="#ref-10">10</a>, <a href="#ref-16">16</a>, <a href="#ref-17">17</a>]</span> for this client and
+<a property="schema:citation http://purl.org/spar/cito/cites" href="http://linkeddatafragments.org/publications/iswc2015-amf.pdf"><abbr title='Triple Pattern Fragments'>TPF</abbr> interface extensions</a> <span class="references">[<a href="#ref-11">11</a>, <a href="#ref-12">12</a>, <a href="#ref-14">14</a>, <a href="#ref-15">15</a>]</span> have been proposed to reduce effort of server or client in some way.
+All of these efforts are however implemented and evaluated in isolation.
+Furthermore, the implementations are tied to <abbr title='Triple Pattern Fragments'>TPF</abbr> interface, which makes it impossible to use them for other types of datasources and interfaces.
+With Comunica, we aim to solve this by modularizing query operation implementations into separate modules,
+so that they can be plugged in and combined in different ways, on top of different datasources and interfaces.</p>
+
+        <p>With Semantic Web technologies providing the capability
+to integrate data from different sources,
+<em>federated query processing</em> has been an active area of research.
+However, most of the existing frameworks require <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> endpoints on every source.
+The <abbr title='Triple Pattern Fragments'>TPF</abbr> Client instead federates over <abbr title='Triple Pattern Fragments'>TPF</abbr> interfaces,
+and achieves <span property="schema:citation http://purl.org/spar/cito/citesAsEvidence" resource="https://dx.doi.org/10.1016/j.websem.2016.03.003"><a href="http://linkeddatafragments.org/publications/jws2016.pdf">similar performance compared to the state of the art</a></span> <span class="references">[<a href="#ref-8">8</a>]</span>
+despite its usage of a more lightweight interface.
+However, no frameworks exist that enable federation over heterogeneous interfaces,
+such as the federation over any combination of <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> endpoints and <abbr title='Triple Pattern Fragments'>TPF</abbr> interfaces.
+With Comunica, we aim to fill this gap.
+In addition dataset-centric approaches,
+alternative methods such as <a property="schema:citation http://purl.org/spar/cito/cites" href="http://olafhartig.de/files/Hartig_QueryingLD_DBSpektrum_Preprint.pdf">link-traversal-based query evaluation</a> <span class="references">[<a href="#ref-9">9</a>]</span> exist
+to query a web of Linked Data documents.</p>
+
+        <h3 id="linked-data-fragments">Linked Data Fragments</h3>
+
+        <p>In order to formally capture the heterogeneity of different Web interfaces to publish <abbr title='Resource Description Framework'>RDF</abbr> data,
+the <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1016/j.websem.2016.03.003"><a href="http://linkeddatafragments.org/publications/jws2016.pdf">Linked Data Fragment</a></span> <span class="references">[<a href="#ref-8">8</a>]</span> (LDF) conceptual framework
+uniformly characterizes responses of Web interfaces to <abbr title='Resource Description Framework'>RDF</abbr>-based knowledge graphs.
+The simplest type of LDF is a <em>data dump</em>—it is the response of a single <abbr title='Hypertext Transfer Protocol'>HTTP</abbr> requests for a complete <abbr title='Resource Description Framework'>RDF</abbr> dataset.
+Other types of LDFs includes responses of <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> endpoints,
+<abbr title='Triple Pattern Fragments'>TPF</abbr> interfaces, and Linked Data documents.</p>
+
+        <p>Existing LDF research highlights that,
+when it comes to publishing datasets on the Web, there is no silver bullet:
+no single interface works well in all situations,
+as each one involves <span property="schema:citation http://purl.org/spar/cito/citesAsEvidence" resource="https://dx.doi.org/10.1016/j.websem.2016.03.003"><a href="http://linkeddatafragments.org/publications/jws2016.pdf">trade-offs</a></span> <span class="references">[<a href="#ref-8">8</a>]</span>.
+As such, data publishers must choose the type of interface that matches their intended use case, target audience and infrastructure.
+This however complicates client-side engines that need to retrieve data from the resulting heterogeneity of interfaces.
+As shown by the <abbr title='Triple Pattern Fragments'>TPF</abbr> approach, interfaces can be self-descriptive and expose one or more <a property="schema:citation http://purl.org/spar/cito/cites" href="http://arxiv.org/abs/1609.07108">features</a> <span class="references">[<a href="#ref-38">38</a>]</span>,
+to describe their functionality using a common vocabulary <span class="references">[<a href="#ref-39">39</a>, <a href="#ref-40">40</a>]</span>.
+This allows clients without prior knowledge of the exact inputs and outputs of an interface
+to discover its usage at runtime.</p>
+
+        <p>A design goal of Comunica is to
+facilitate interaction with any current and future interface
+within the LDF framework,
+both in single-source and federated scenarios.</p>
+
+        <h3 id="software-design-patterns">Software Design Patterns</h3>
+
+        <p>In the following, we discuss three software design patterns that are relevant to the modular design of the Comunica engine.</p>
+
+        <h4 id="publishsubscribe-pattern">Publish–subscribe pattern</h4>
+
+        <p>The <em>publish-subscribe</em> <span class="references">[<a href="#ref-25">25</a>]</span> design pattern involves passing <em>messages</em> between <em>publishers</em> and <em>subscribers</em>.
+Instead of programming publishers to send messages directly to subscribers, they are programmed to <em>publish</em> messages to certain <em>categories</em>.
+Subscribers can <em>subscribe</em> to these categories which will cause them to receive these published messages, without requiring prior knowledge of the publishers.
+This pattern is useful for decoupling software components from each other,
+and only requiring prior knowledge of message categories.
+We use this pattern in Comunica for allowing different implementations of certain tasks to subscribe to task-specific buses.</p>
+
+        <h4 id="actor-model">Actor Model</h4>
+
+        <p>The <em>actor</em> model <span class="references">[<a href="#ref-23">23</a>]</span> was designed as a way to achieve highly parallel systems consisting of many independent <em>agents</em>
+communicating using messages, similar to the publish–subscribe pattern.
+An actor is a computational unit that performs a specific task, acts on messages, and can send messages to other actors.
+The main advantages of the actor model are that actors can be independently made to implement certain specific tasks based on messages,
+and that these can be handled asynchronously.
+These characteristics are highly beneficial to the modularity that we want to achieve with Comunica.
+That is why we use this pattern in combination with the publish–subscribe pattern to let each implementation of a certain task correspond to a separate actor.</p>
+
+        <h4 id="mediator-pattern">Mediator pattern</h4>
+
+        <p>The <em>mediator</em> <span class="references">[<a href="#ref-24">24</a>]</span> pattern is able to reduce coupling between software components that interact with each other,
+and to easily change the interaction if needed.
+This can be achieved by encapsulating the interaction between software components in a mediator component.
+Instead of the components having to interact with each other directly,
+they now interact through the mediator.
+These components therefore do not require prior knowledge of each other,
+and different implementations of these mediators can lead to different interaction results.
+In Comunica, we use this pattern to handle actions when multiple actors are able to solve the same task,
+by for example choosing the <em>best</em> actor for a task, or by combining the solutions of all actors.</p>
+
+      </section>
+
+  <section id="in-use">
+        <h2>In-use</h2>
+
+        <p>To further help people get started with Comunica we have provided tutorials on multiple conferences
+which help with some of the first hurdles in getting everything working and making use of it.
+These <a href="https://comunica.github.io/Tutorial-ESWC2019-Comunica/">tutorials</a> can all be found online 
+and give a solid introduction to getting started with Comunica.
+These can be used next to the existing documentation to fully grasp what can be done with the system
+and how it can be extended.</p>
+
+        <p>The <a href="https://github.com/comunica/Tutorial-Comunica-Querying-Data/">first</a> tutorial
+covers all the different ways the already existing actors and configurations can be used
+to execute <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> queries over new and existing data sources.
+These range from executing queries with a command line tool
+to embedding Comunica in the code of your own project
+to setting up a Web service other users can use to execute queries.</p>
+
+        <p>The <a href="https://github.com/comunica/Tutorial-Comunica-Reduced-Actor/">second</a> tutorial
+explains all the steps necessary to create a new actor that can be embedded into the existing configurations.
+This includes an overview of all the configuration files that are required
+and what each of them has to contain.
+Besides that it also covers the helper classes that can be used
+and how an existing configuration can be adapted to add the new actor.</p>
+
+        <p><a href="https://github.com/RubenVerborgh/LDflex">LDflex</a> is a language that allows developers
+to easily access <abbr title='Resource Description Framework'>RDF</abbr> data in JavaScript.
+This makes <abbr title='Resource Description Framework'>RDF</abbr> data much more accessible for front-end developers and other people who might not be used
+to working with <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> queries but still want to make use of Linked Data,
+thereby making it easier to spread the use of Semantic technologies.
+It is used by the <a href="https://github.com/solid/query-ldflex">Solid client</a> among other,
+and to support queries it makes use of <a href="https://github.com/RubenVerborgh/LDflex-Comunica">Comunica</a>.
+Additionally, a Comunica <a href="https://github.com/comunica/actor-http-solid-auth-fetch">actor</a>
+has already been made to support making <abbr title='Hypertext Transfer Protocol'>HTTP</abbr> requests using Solid authentication,
+allowing users to query their private Solid data through Comunica.</p>
+
+        <p><a href="https://github.com/comunica/sparqlee" class="mandatory" data-link-text="https:/​/​github.com/​comunica/​sparqlee">Sparqlee</a>
+is a JavaScript library to evaluate <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> expressions.
+This library was built for Comunica to support these expressions,
+but due to the modular nature of Comunica,
+it can also fully stand on its own as a separate library
+and could even be used by other <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> libraries to handle their expressions.</p>
+
+        <p>The Comunica <a href="https://github.com/comunica/comunica">repository</a> already has been starred 89 times
+at the time of writing and has been forked 12 times.
+The core Comunica npm <a href="https://www.npmjs.com/package/@comunica/core">package</a>,
+which is required for all Comunica variants,
+currently has 1083 weekly downloads.
+All Comunica packages can also be found separately on <a href="https://www.npmjs.com/org/comunica">npm</a>.
+Currently there are already 128 packages available to be used.</p>
+
+      </section>
+
+  <section id="tooling">
+        <h2>Tooling</h2>
+
+        <p>There are already several tools available to further extend what can be done with Comunica
+or to help in its usage.</p>
+
+        <h3 id="jquery-widget">jQuery Widget</h3>
+        <p>The <a href="https://github.com/comunica/jQuery-Widget.js/" class="mandatory" data-link-text="https:/​/​github.com/​comunica/​jQuery-​Widget.js/​">jQuery Widget</a>
+creates a browser-based GUI for the Comunica <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> client,
+allowing users to execute <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> queries in their browser without having to install anything.
+While it originally made use of the <abbr title='Triple Pattern Fragments'>TPF</abbr> client,
+and thus had less support for heterogeneous sources,
+it now uses Comunica in the backend providing all its advantages.
+Besides the support for many different kinds of interfaces,
+it also supports executing GraphQL queries over those sources.
+Changing the Comunica configuration that is being used
+is simply a question of changing the configuration file in the repository,
+thereby allowing anyone to quickly set up an online querying engine with their own implementation.</p>
+
+        <h3 id="bencher">Bencher</h3>
+        <p>Although evaluations are much easier with Comunica due to the easy swapping of modules,
+there is still some work that needs to be done before they can actually happen,
+such as setting up the server, adding the test data and having test queries.
+<a href="https://github.com/comunica/comunica-bencher/" class="mandatory" data-link-text="https:/​/​github.com/​comunica/​comunica-​bencher/​">Comunica bencher</a>
+helps users skip several of those steps.
+It can automatically generate everything that is necessary to set up a <abbr title='Triple Pattern Fragments'>TPF</abbr> server,
+create a <span property="schema:citation http://purl.org/spar/cito/cites" resource="https://dx.doi.org/10.1007/978-3-319-11964-9_13"><a href="http://dx.doi.org/10.1007/978-3-319-11964-9_13">Watdiv</a></span> <span class="references">[<a href="#ref-41">41</a>]</span> dataset and corresponding queries.
+It can then also set up a client to run those queries over the server
+and generate graphs from the results.
+Although not every kind of setup can be covered with this,
+it is already incredibly useful for many use cases.
+Specifics such as the amount of dry runs, caching, data size, etc.
+can all be tweaked in the configuration,
+allowing users to fine-tune the tool to their needs.
+Finally, this way the tests can also easily be shared for later reuse.</p>
+
+        <h3 id="generator">Generator</h3>
+        <p>Creating a Comunica actor can be a complex endeavour for developers without any experience in the system:
+several configuration files have to be made,
+these have to be mapped to the code,
+and the code has to be follow certain rules to make sure it integrates with the rest of Comunica.
+That is why we created a <a href="https://github.com/comunica/generate-comunica" class="mandatory" data-link-text="https:/​/​github.com/​comunica/​generate-​comunica">Comunica generator</a>,
+which creates an empty actor with all the necessary files already in place with all the default values.
+It creates this initial project by asking the user several questions
+and then automatically generates the corresponding TypeScript and JSON-LD files
+with the values based on the answers.
+These still need to be changed, especially if the user has many extra requirements for their actor,
+but it greatly reduces the start-up time when coding and reduces the chances of errors or missing files.</p>
 
       </section>
 
   <section id="conclusions">
         <h2>Conclusions</h2>
+
+        <p>In this work, we introduced Comunica as a highly modular meta engine for federated <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> query evaluation over heterogeneous interfaces.
+Comunica is thereby the first system that accomplishes the Linked Data Fragments vision of a client that is able to query over heterogeneous interfaces.
+Not only can Comunica be used as a client-side <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> engine, it can also be customized to become a more lightweight engine and perform more specific tasks,
+such as for example only evaluating BGPs over Turtle files,
+evaluating the efficiency of different join operators,
+or even serve as a complete server-side <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> query endpoint that aggregates different datasources.
+In future work, we will look into supporting supporting alternative (non-semantic) query languages as well, such as <a property="schema:citation http://purl.org/spar/cito/cites" href="http://facebook.github.io/graphql/October2016/">GraphQL</a> <span class="references">[<a href="#ref-42">42</a>]</span>.</p>
+
+        <p>If you are a Web researcher, then Comunica is the ideal research platform
+for investigating new Linked Data publication interfaces,
+and for experimenting with different query algorithms.
+New modules can be implemented independently without having to fork existing codebases.
+The modules can be combined with each other using an <abbr title='Resource Description Framework'>RDF</abbr>-based configuration file
+that can be instantiated into an actual engine through dependency injection.
+However, the target audience is broader than just the research community.
+As Comunica is built on Linked Data and Web technologies,
+and is extensively documented and has a ready-to-use API,
+developers of <abbr title='Resource Description Framework'>RDF</abbr>-consuming (Web) applications can also make use of the platform.
+In the future, we will continue <a href="https://github.com/comunica/comunica/wiki/Sustainability-Plan" class="mandatory" data-link-text="https:/​/​github.com/​comunica/​comunica/​wiki/​Sustainability-​Plan">maintaining</a>
+and developing Comunica and intend to support and collaborate with future researchers on this platform.</p>
+
+        <p>The introduction of Comunica will trigger a <em>new generation of Web querying research</em>.
+Due to its flexibility and modularity,
+existing areas can be <em>combined</em> and <em>evaluated</em> in more detail,
+and <em>new promising areas</em> that remained covered so far will be exposed.</p>
 
       </section>
 
@@ -113,11 +799,102 @@ Ruben Verborgh is a postdoctoral fellow of the Research Foundation – Flanders.
 
       </section>
 
+<section id="references">
+<h2>References</h2>
+<dl class="references">
+  <dt id="ref-1">[1]</dt>
+  <dd resource="https://www.w3.org/TR/2013/REC-sparql11-query-20130321/" typeof="schema:CreativeWork">Harris, S., Seaborne, A., Prud’hommeaux, E.: <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> 1.1 Query Language. W3C, <a href="https://www.w3.org/TR/2013/REC-sparql11-query-20130321/">https:/​/​www.w3.org/TR/2013/REC-sparql11-query-20130321/</a> (2013).</dd>
+  <dt id="ref-2">[2]</dt>
+  <dd resource="https://dx.doi.org/10.1145/1804669.1804675" typeof="schema:Article">Schmidt, M., Meier, M., Lausen, G.: Foundations of <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> Query Optimization. In: Proceedings of the 13th International Conference on Database Theory. pp. 4–33 (2010).</dd>
+  <dt id="ref-3">[3]</dt>
+  <dd resource="https://dx.doi.org/10.1145/1367497.1367578" typeof="schema:Article">Stocker, M., Seaborne, A., Bernstein, A., Kiefer, C., Reynolds, D.: <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> Basic Graph Pattern Optimization Using Selectivity Estimation. In: Proceedings of the 17th International Conference on World Wide Web. pp. 595–604 (2008).</dd>
+  <dt id="ref-4">[4]</dt>
+  <dd resource="https://dx.doi.org/10.1007/978-3-642-02184-8_2" typeof="schema:CreativeWork">Erling, O., Mikhailov, I.: <abbr title='Resource Description Framework'>RDF</abbr> Support in the Virtuoso DBMS. In: Pellegrini, T., Auer, S., Tochtermann, K., and Schaffert, S. (eds.) Networked Knowledge - Networked Media: Integrating Knowledge Management, New Media Technologies and Semantic Systems. pp. 7–24. Springer Berlin Heidelberg, Berlin, Heidelberg (2009).</dd>
+  <dt id="ref-5">[5]</dt>
+  <dd resource="#fSPARQL" typeof="schema:Article">Cheng, J., Ma, Z.M., Yan, L.: f-<abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr>: A Flexible Extension of <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr>. In: Bringas, P.G., Hameurlain, A., and Quirchmayr, G. (eds.) Database and Expert Systems Applications. pp. 487–494. Springer Berlin Heidelberg, Berlin, Heidelberg (2010).</dd>
+  <dt id="ref-6">[6]</dt>
+  <dd resource="https://www.w3.org/DesignIssues/LinkedData.html" typeof="schema:CreativeWork">Berners-Lee, T.: Linked Data. <a href="https://www.w3.org/DesignIssues/LinkedData.html">https:/​/​www.w3.org/DesignIssues/LinkedData.html</a> (2009).</dd>
+  <dt id="ref-7">[7]</dt>
+  <dd resource="https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/" typeof="schema:CreativeWork">Feigenbaum, L., Todd Williams, G., Grant Clark, K., Torres, E.: <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> 1.1 Protocol. W3C, <a href="https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/">https:/​/​www.w3.org/TR/2013/REC-sparql11-protocol-20130321/</a> (2013).</dd>
+  <dt id="ref-8">[8]</dt>
+  <dd resource="https://dx.doi.org/10.1016/j.websem.2016.03.003" typeof="schema:Article">Verborgh, R., Vander Sande, M., Hartig, O., Van Herwegen, J., De Vocht, L., De Meester, B., Haesendonck, G., Colpaert, P.: Triple Pattern Fragments: a Low-cost Knowledge Graph Interface for the Web. Journal of Web Semantics. 37–38, (2016).</dd>
+  <dt id="ref-9">[9]</dt>
+  <dd resource="http://olafhartig.de/files/Hartig_QueryingLD_DBSpektrum_Preprint.pdf" typeof="schema:Article">Hartig, O.: An overview on execution strategies for Linked Data queries. Datenbank-Spektrum. 13, 89–99 (2013).</dd>
+  <dt id="ref-10">[10]</dt>
+  <dd resource="http://linkeddatafragments.org/publications/eswc2015.pdf" typeof="schema:Article">Van Herwegen, J., Verborgh, R., Mannens, E., Van de Walle, R.: Query Execution Optimization for Clients of Triple Pattern Fragments. In: The Semantic Web. Latest Advances and New Domains (2015).</dd>
+  <dt id="ref-11">[11]</dt>
+  <dd resource="http://linkeddatafragments.org/publications/iswc2015-amf.pdf" typeof="schema:Article">Vander Sande, M., Verborgh, R., Van Herwegen, J., Mannens, E., Van de Walle, R.: Opportunistic Linked Data Querying through Approximate Membership Metadata. In: Arenas, M., Corcho, O., Simperl, E., Strohmaier, M., d’Aquin, M., Srinivas, K., Groth, P., Dumontier, M., Heflin, J., Thirunarayan, K., and Staab, S. (eds.) The Semantic Web – ISWC 2015. pp. 92–110. Springer (2015).</dd>
+  <dt id="ref-12">[12]</dt>
+  <dd resource="http://linkeddatafragments.org/publications/iswc2015-substring.pdf" typeof="schema:Article">Van Herwegen, J., De Vocht, L., Verborgh, R., Mannens, E., Van de Walle, R.: Substring Filtering for Low-Cost Linked Data Interfaces. In: Arenas, M., Corcho, O., Simperl, E., Strohmaier, M., d’Aquin, M., Srinivas, K., Groth, P., Dumontier, M., Heflin, J., Thirunarayan, K., and Staab, S. (eds.) The Semantic Web – ISWC 2015. pp. 128–143. Springer (2015).</dd>
+  <dt id="ref-13">[13]</dt>
+  <dd resource="http://iswc2015.semanticweb.org/sites/iswc2015.semanticweb.org/files/93660097.pdf" typeof="schema:Article">Acosta, M., Vidal, M.-E.: Networks of Linked Data Eddies: An Adaptive Web Query Processing Engine for <abbr title='Resource Description Framework'>RDF</abbr> Data. In: The Semantic Web – ISWC 2015. pp. 111–127 (2015).</dd>
+  <dt id="ref-14">[14]</dt>
+  <dd resource="https://dx.doi.org/10.1007/978-3-319-48472-3_48" typeof="schema:Article">Hartig, O., Buil-Aranda, C.: Bindings-Restricted Triple Pattern Fragments. In: Proceedings of the 15th International Conference on Ontologies, DataBases, and Applications of Semantics. pp. 762–779 (2016).</dd>
+  <dt id="ref-15">[15]</dt>
+  <dd resource="http://rubensworks.net/raw/publications/2017/vtpf.pdf" typeof="schema:Article">Taelman, R., Vander Sande, M., Verborgh, R., Mannens, E.: Versioned Triple Pattern Fragments: A Low-cost Linked Data Interface Feature for Web Archives. In: Proceedings of the 3rd Workshop on Managing the Evolution and Preservation of the Data Web (2017).</dd>
+  <dt id="ref-16">[16]</dt>
+  <dd resource="#cyclades" typeof="schema:Article">Folz, P., Skaf-Molli, H., Molli, P.: CyCLaDEs: a decentralized cache for triple pattern fragments. In: International Semantic Web Conference. pp. 455–469. Springer (2016).</dd>
+  <dt id="ref-17">[17]</dt>
+  <dd resource="#tpfqs" typeof="schema:Article">Taelman, R., Verborgh, R., Colpaert, P., Mannens, E.: Continuous client-side query evaluation over dynamic Linked Data. In: International Semantic Web Conference. pp. 273–289. Springer (2016).</dd>
+  <dt id="ref-18">[18]</dt>
+  <dd resource="https://dx.doi.org/10.1007/978-3-030-00668-6_15" typeof="schema:Article">Taelman, R., Van Herwegen, J., Vander Sande, M., Verborgh, R.: Comunica: a Modular <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> Query Engine for the Web. In: Vrandečić, D., Bontcheva, K., Suárez-Figueroa, M.C., Presutti, V., Celino, I., Sabou, M., Kaffee, L.-A., and Simperl, E. (eds.) Proceedings of the 17th International Semantic Web Conference. pp. 239–255. Springer (2018).</dd>
+  <dt id="ref-19">[19]</dt>
+  <dd resource="https://martinfowler.com/articles/injection.html" typeof="schema:CreativeWork">Fowler, M.: Inversion of Control Containers and the Dependency Injection pattern. <a href="https://martinfowler.com/articles/injection.html">https:/​/​martinfowler.com/articles/injection.html</a> (2004).</dd>
+  <dt id="ref-20">[20]</dt>
+  <dd resource="http://componentsjs.readthedocs.io/en/latest/" typeof="schema:CreativeWork">Taelman, R.: Components.js. <a href="http://componentsjs.readthedocs.io/en/latest/">http:/​/​componentsjs.readthedocs.io/en/latest/</a></dd>
+  <dt id="ref-21">[21]</dt>
+  <dd resource="https://linkedsoftwaredependencies.org/articles/describing-experiments/" typeof="schema:Article">Van Herwegen, J., Taelman, R., Capadisli, S., Verborgh, R.: Describing configurations of software experiments as Linked Data. In: Proceedings of the 1st Workshop on Enabling Open Semantic Science (2017).</dd>
+  <dt id="ref-22">[22]</dt>
+  <dd resource="#jsonld" typeof="schema:Article">Consortium, W.W.W., others: JSON-LD 1.0: a JSON-based serialization for linked data. (2014).</dd>
+  <dt id="ref-23">[23]</dt>
+  <dd resource="#actormodel" typeof="schema:Article">Hewitt, C., Bishop, P., Steiger, R.: Session 8 formalisms for artificial intelligence a universal modular actor formalism for artificial intelligence. In: Advance Papers of the Conference. p. 235. Stanford Research Institute (1973).</dd>
+  <dt id="ref-24">[24]</dt>
+  <dd resource="#mediatorpattern" typeof="schema:Book">Gamma, E.: Design patterns: elements of reusable object-oriented software. Pearson Education India (1995).</dd>
+  <dt id="ref-25">[25]</dt>
+  <dd resource="#publishsubscribepattern" typeof="schema:Book">Birman, K., Joseph, T.: Exploiting virtual synchrony in distributed systems. ACM (1987).</dd>
+  <dt id="ref-26">[26]</dt>
+  <dd resource="https://www.w3.org/TR/2013/REC-sparql11-results-json-20130321/" typeof="schema:CreativeWork">Grant Clark, K., Feigenbaum, L., Torres, E.: <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> 1.1 Query Results JSON Format. W3C, <a href="https://www.w3.org/TR/2013/REC-sparql11-results-json-20130321/">https:/​/​www.w3.org/TR/2013/REC-sparql11-results-json-20130321/</a> (2013).</dd>
+  <dt id="ref-27">[27]</dt>
+  <dd resource="https://www.w3.org/TR/rdf-sparql-XMLres/" typeof="schema:CreativeWork">Hawke, S.: <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> Query Results XML Format (Second Edition). W3C, <a href="https://www.w3.org/TR/rdf-sparql-XMLres/">https:/​/​www.w3.org/TR/rdf-sparql-XMLres/</a> (2013).</dd>
+  <dt id="ref-28">[28]</dt>
+  <dd resource="https://www.w3.org/TR/2008/REC-rdf-sparql-query-20080115/" typeof="schema:CreativeWork">Prud’hommeaux, E., Seaborne, A.: <abbr title='SPARQL Procotol and RDF Query Language'>SPARQL</abbr> Query Language for <abbr title='Resource Description Framework'>RDF</abbr>. W3C, <a href="https://www.w3.org/TR/2008/REC-rdf-sparql-query-20080115/">https:/​/​www.w3.org/TR/2008/REC-rdf-sparql-query-20080115/</a> (2008).</dd>
+  <dt id="ref-29">[29]</dt>
+  <dd resource="http://www.websemanticsjournal.org/index.php/ps/article/view/328" typeof="schema:Article">Fernández, J.D., Martínez-Prieto, M.A., Gutiérrez, C., Polleres, A., Arias, M.: Binary <abbr title='Resource Description Framework'>RDF</abbr> Representation for Publication and Exchange (HDT). Web Semantics: Science, Services and Agents on the World Wide Web. 19, 22–41 (2013).</dd>
+  <dt id="ref-30">[30]</dt>
+  <dd resource="https://rdfostrich.github.io/article-demo/" typeof="schema:Article">Taelman, R., Vander Sande, M., Verborgh, R.: OSTRICH: Versioned Random-Access Triple Store. In: Proceedings of the 27th International Conference Companion on World Wide Web (2018).</dd>
+  <dt id="ref-31">[31]</dt>
+  <dd resource="#allegrograph" typeof="schema:Article">Aasman, J.: AllegroGraph: <abbr title='Resource Description Framework'>RDF</abbr> triple database. Cidade: Oakland Franz Incorporated. 17, (2006).</dd>
+  <dt id="ref-32">[32]</dt>
+  <dd resource="#blazegraph" typeof="schema:Article">Thompson, B.B., Personick, M., Cutcher, M.: The Bigdata® <abbr title='Resource Description Framework'>RDF</abbr> Graph Database. Linked Data Management. 193–237 (2014).</dd>
+  <dt id="ref-33">[33]</dt>
+  <dd resource="#virtuoso" typeof="schema:Chapter">Erling, O., Mikhailov, I.: Virtuoso: <abbr title='Resource Description Framework'>RDF</abbr> support in a native RDBMS. In: Semantic Web Information Management. pp. 501–519. Springer (2010).</dd>
+  <dt id="ref-34">[34]</dt>
+  <dd resource="https://jena.apache.org/" typeof="schema:CreativeWork">Apache Jena. <a href="https://jena.apache.org/">https:/​/​jena.apache.org/</a></dd>
+  <dt id="ref-35">[35]</dt>
+  <dd resource="https://rdflib.readthedocs.io/en/stable/" typeof="schema:CreativeWork">RDFLib. <a href="https://rdflib.readthedocs.io/en/stable/">https:/​/​rdflib.readthedocs.io/en/stable/</a></dd>
+  <dt id="ref-36">[36]</dt>
+  <dd resource="https://github.com/linkeddata/rdflib.js" typeof="schema:CreativeWork">rdflib.js. <a href="https://github.com/linkeddata/rdflib.js">https:/​/​github.com/linkeddata/rdflib.js</a></dd>
+  <dt id="ref-37">[37]</dt>
+  <dd resource="https://github.com/antoniogarrote/rdfstore-js" typeof="schema:CreativeWork">rdfstore-js. <a href="https://github.com/antoniogarrote/rdfstore-js">https:/​/​github.com/antoniogarrote/rdfstore-js</a></dd>
+  <dt id="ref-38">[38]</dt>
+  <dd resource="http://arxiv.org/abs/1609.07108" typeof="schema:Article">Verborgh, R., Dumontier, M.: A Web API ecosystem through feature-based reuse. CoRR. abs/1609.07108, (2016).</dd>
+  <dt id="ref-39">[39]</dt>
+  <dd resource="#hydra" typeof="schema:Article">Lanthaler, M., Gütl, C.: Hydra: A Vocabulary for Hypermedia-Driven Web APIs. LDOW. 996, (2013).</dd>
+  <dt id="ref-40">[40]</dt>
+  <dd resource="https://linkeddatafragments.github.io/Article-Declarative-Hypermedia-Responses/" typeof="schema:Article">Taelman, R., Verborgh, R.: Declaratively Describing Responses of Hypermedia-Driven Web APIs. In: Proceedings of the 9th International Conference on Knowledge Capture (2017).</dd>
+  <dt id="ref-41">[41]</dt>
+  <dd resource="https://dx.doi.org/10.1007/978-3-319-11964-9_13" typeof="schema:Article">Aluç, G., Hartig, O., Özsu, M.T., Daudjee, K.: Diversified Stress Testing of <abbr title='Resource Description Framework'>RDF</abbr> Data Management Systems. In: Proceedings of the 13th International Semantic Web Conference - Part I. pp. 197–212. Springer-Verlag New York, Inc. (2014).</dd>
+  <dt id="ref-42">[42]</dt>
+  <dd resource="http://facebook.github.io/graphql/October2016/" typeof="schema:CreativeWork">Facebook, I.: GraphQL. Working Draft, Oct. 2016. <a href="http://facebook.github.io/graphql/October2016/">http:/​/​facebook.github.io/graphql/October2016/</a></dd>
+</dl>
+</section>
 </footer>
 
 
 </div>
 </div>
+
+
 
 </body>
 </html>
